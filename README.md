@@ -1,10 +1,10 @@
-# ShipNow — Pre-entrega Módulo 5 Backend III
+# ShipNow — Pre-entrega Módulo 6 Backend III
 
-API del proyecto anterior ampliada con documentación OpenAPI 3.0.3 y Swagger UI. Conserva usuarios, productos, mocks, Winston y manejo centralizado de errores. Incorpora rutas persistentes de pedidos y entregas para cubrir los módulos de la consigna.
+API de ShipNow con una suite de tests funcionales del Módulo 6, implementada con Mocha, Chai y Supertest. Cubre usuarios, productos, pedidos, entregas, mocks, logger y Swagger, con casos exitosos y errores esperados. Las pruebas utilizan una instancia temporal de MongoDB, datos controlados y limpieza automática. La API conserva la documentación OpenAPI 3.0.3, Swagger UI, Winston y el manejo centralizado de errores.
 
 ## Instalación y ejecución
 
-Requisitos: Node.js >= 20.19, npm y MongoDB local o Atlas.
+Requisitos: Node.js >= 20.19 y npm. Para ejecutar la aplicación se requiere MongoDB local o Atlas. Para los tests funcionales no hace falta configurar una base externa: la suite inicia su propia instancia temporal de MongoDB.
 
 ```sh
 npm ci
@@ -17,6 +17,8 @@ PORT=8080
 MONGODB_URI=mongodb://127.0.0.1:27017/shipnow_modulo5
 NODE_ENV=development
 ```
+
+El nombre `shipnow_modulo5` se conserva del archivo `.env.example` como nombre de la base de desarrollo; no identifica el módulo de esta entrega. Podés elegir otra base actualizando `MONGODB_URI` en tu `.env`. Los tests no utilizan esta base.
 
 En PowerShell: `Copy-Item .env.example .env`. Si ya existe un `.env`, conservarlo y revisar sus valores. Usar una base de prueba: seed inserta datos reales.
 
@@ -107,13 +109,61 @@ Swagger documenta los errores aplicables a cada operación. Un fallo de conexió
 
 GET `/api/loggerTest` es una herramienta técnica de validación, no una función de negocio. Emite debug, http, info, warning, error y fatal. En desarrollo se muestran todos; en producción se muestran info y niveles de mayor gravedad. Solo error y fatal se guardan en `logs/error.log`, con rotación. Es esperable que esta prueba genere mensajes de error y fatal.
 
-## Verificación
+## Testing funcional Módulo 6
+
+### Herramientas y ejecución
+
+Mocha organiza y ejecuta los casos, Chai valida las respuestas y Supertest realiza peticiones HTTP sobre la app Express importada desde `src/app.js`. La aplicación está separada del arranque de `src/server.js`: no hay que ejecutar `npm start` ni elegir manualmente un puerto para correr los tests.
+
+Desde la raíz del proyecto:
 
 ```sh
+npm ci
+npm test
 npm test
 ```
 
-La suite funcional del módulo 6 usa Mocha, Chai, Supertest y MongoDB temporal real. No necesita iniciar el servidor ni configurar Atlas. Los tests anteriores con dobles de modelos se conservan y se ejecutan mediante npm run test:legacy. Ver la sección Testing funcional Módulo 6 al final.
+Las dos ejecuciones permiten comprobar que la suite no depende de datos de una corrida anterior. La primera ejecución puede necesitar internet para descargar el binario de MongoDB. El equipo debe permitir ejecutar ese proceso y abrir los puertos locales temporales utilizados por MongoDB y Supertest.
+
+### Entorno y base de datos de testing
+
+El archivo `.env.test` contiene únicamente valores de prueba y se incluye en el repositorio:
+
+```dotenv
+NODE_ENV=test
+PORT=8081
+TEST_DB_NAME=shipnow_test
+```
+
+`mongodb-memory-server` inicia una instancia real y descartable de MongoDB. La suite genera su `MONGODB_URI` y no utiliza la URI de desarrollo ni requiere Atlas o un MongoDB iniciado a mano. `PORT` es un valor del entorno de prueba; Supertest y MongoDB utilizan puertos temporales asignados automáticamente.
+
+Los hooks de `tests/setup.js` conectan a esa instancia, limpian sus colecciones antes de cada caso y cierran la conexión y el proceso al terminar. Cada test crea sus datos y la suite se ejecuta sin paralelismo. Los fallos controlados de infraestructura usan dobles que se restauran después de cada caso. Los logs del entorno de testing se guardan en `logs/test/` y no se muestran por consola.
+
+### Cobertura
+
+- **Usuarios:** listado vacío y con datos, creación, consulta, actualización y eliminación; datos incompletos, ID inválido, usuario inexistente y email duplicado. Se comprueba que no se exponga la contraseña.
+- **Pedidos y entregas:** listado, creación, consulta por ID y actualización persistida de estados; datos incompletos, referencias inexistentes, IDs y estados inválidos.
+- **Productos:** creación, listado, consulta, actualización y eliminación; validación de datos, estados e IDs y recursos inexistentes.
+- **Mocks:** previews de usuarios, repartidores, pedidos, entregas y lotes; cantidades y relaciones, cantidades inválidas, seed de usuarios y de todas las colecciones, y errores de entrada.
+- **Logger:** respuesta con los seis niveles, rutas y métodos no admitidos y fallo controlado de escritura.
+- **Swagger:** interfaz HTML, recurso JavaScript y especificación JSON validada con Swagger Parser. Los métodos distintos de GET y HEAD devuelven el error centralizado 404.
+- **Errores generales:** formato `status/error/code/message`, status HTTP, JSON inválido, cuerpo demasiado grande, ruta inexistente, fallos de consulta (500) y fallo de persistencia de seed (503).
+
+Las respuestas se validan por su estructura y propiedades importantes, además del status HTTP. Se comprueban los errores de entrada y recursos inexistentes documentados para los flujos cubiertos; no se afirma cobertura exhaustiva de todas las combinaciones de campos y fallos internos de OpenAPI.
+
+La verificación realizada el 12 de noviembre de 2026 aprobó **71 pruebas funcionales en dos ejecuciones consecutivas**, sin limpieza manual.
+
+### Pruebas anteriores
+
+La carpeta `test/` conserva las pruebas previas de logging y Swagger, ejecutadas con `node:test`. Se mantienen separadas de `tests/`, que utiliza Mocha:
+
+```sh
+npm run test:legacy
+```
+
+En la verificación del 12 de noviembre de 2026 también aprobaron las 5 pruebas anteriores. Este comando es independiente de `npm test`.
+
+Ver [documentación complementaria del Módulo 6](docs/modulo-6.md).
 
 ## Estructura
 
@@ -121,15 +171,11 @@ La suite funcional del módulo 6 usa Mocha, Chai, Supertest y MongoDB temporal r
 - `src/docs/openapi.json`: contrato de todas las operaciones.
 - `src/routes`, `controllers`, `services`, `repositories`, `models`: arquitectura existente; las nuevas rutas de envío delegan en shipping.service y reutilizan modelos y validadores.
 - `src/errors` y `src/middlewares`: diccionario y manejo centralizado de errores.
-- `test`: pruebas automatizadas.
-- `docs/modulo-4.md`: documentación anterior conservada como referencia histórica.
+- `tests/`: suite funcional del Módulo 6, helpers y hooks de conexión y limpieza (Mocha, Chai y Supertest).
+- `test/`: pruebas anteriores de logging y Swagger (node:test).
+- `.env.test`: valores del entorno de pruebas.
+- `docs/modulo-6.md`: evaluación de la base, guía de testing y cambios del Módulo 6.
 
 ## Entrega en GitHub
 
-Entregar el enlace al repositorio con estos cambios. Incluir package-lock.json; excluir node_modules, .env y logs mediante .gitignore. No publicar credenciales. Este entregable no crea commits ni publica cambios automáticamente.
-
-## Testing funcional Módulo 6
-
-Herramientas: Mocha, Chai, Supertest y mongodb-memory-server. Ejecutar npm ci y npm test (dos veces para comprobar repetibilidad). Cubre usuarios, pedidos, entregas, mocks, logger, Swagger y errores. No requiere una base externa: inicia MongoDB temporal, limpia antes de cada caso y lo cierra al terminar. Variables en .env.test: NODE_ENV=test, PORT=8081, TEST_DB_NAME=shipnow_test; MONGODB_URI se genera automáticamente. Primera ejecución: requiere descargar el binario de MongoDB. Ver [guía y evaluación de la base](docs/modulo-6.md).
-
-
+Entregar el enlace al repositorio con el código, la suite integrada, `package-lock.json`, `.env.example` y `.env.test`. Excluir `node_modules/`, `.env`, `logs/` y `coverage/` mediante `.gitignore`. No publicar credenciales.
